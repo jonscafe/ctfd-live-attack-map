@@ -2,6 +2,8 @@
 
 This plugin adds a live attack map page at `/livemap` and a site-wide first-blood toast for CTFd.
 
+Adjust the poll time as you needed, just make sure that it didnt self-DoS your CTFd.
+
 ## Do You Need `npm build`?
 
 No, not for this plugin.
