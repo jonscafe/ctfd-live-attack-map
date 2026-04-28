@@ -4,8 +4,8 @@
   }
   window.__ctfdLiveMapLoaded = true;
 
-  const LIVEMAP_POLL_INTERVAL = 2000;
-  const GLOBAL_POLL_INTERVAL = 4000;
+  const LIVEMAP_POLL_INTERVAL = 30000;
+  const GLOBAL_POLL_INTERVAL = 30000;
   const TOP_NODE_COUNT = 10;
   const SOLVE_FEED_COUNT = 50;
   const TOAST_DURATION = 4500;
