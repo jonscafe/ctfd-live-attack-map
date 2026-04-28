@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="livemap-page" x-data="LiveMap">
+  <div class="livemap-header">
+    <div>
+      <p class="livemap-kicker">CTFd Plugin</p>
+      <h1 class="livemap-title">
+        <i class="fas fa-satellite-dish" aria-hidden="true"></i>
+        Live Attack Map
+      </h1>
+    </div>
+    <div class="livemap-badges">
+      <span class="livemap-badge" :class="'is-' + mapStatusTone" x-text="mapStatus"></span>
+      <span class="livemap-badge is-count" x-text="stats.teams + ' Top ' + stats.mode"></span>
+      <span class="livemap-badge is-count" x-text="stats.challs + ' Challs'"></span>
+      <span class="livemap-badge is-count" x-text="stats.solves + ' Solves'"></span>
+    </div>
+  </div>
+
+  <div class="livemap-body">
+    <div class="livemap-canvas-wrap" x-ref="mapWrap">
+      <canvas x-ref="mapCanvas" aria-label="Live attack map canvas"></canvas>
+
+      <div class="livemap-stats-overlay">
+        <div class="livemap-overlay-title">Signal</div>
+        <div class="livemap-overlay-row">
+          <span>Mode</span>
+          <strong x-text="stats.mode"></strong>
+        </div>
+        <div class="livemap-overlay-row">
+          <span>Visible Nodes</span>
+          <strong x-text="stats.teams + stats.challs"></strong>
+        </div>
+        <div class="livemap-overlay-row">
+          <span>Active Beams</span>
+          <strong x-text="beams.length"></strong>
+        </div>
+        <div class="livemap-overlay-row">
+          <span>Last Poll</span>
+          <strong x-text="lastPollLabel"></strong>
+        </div>
+      </div>
+
+      <div class="livemap-legend">
+        <div class="livemap-overlay-title">Legend</div>
+        <div class="livemap-legend-row">
+          <span class="livemap-legend-dot is-team"></span>
+          <span>Team / User Node</span>
+        </div>
+        <div class="livemap-legend-row">
+          <span class="livemap-legend-dot is-challenge"></span>
+          <span>Challenge Node</span>
+        </div>
+        <div class="livemap-legend-row">
+          <span class="livemap-legend-line is-solve"></span>
+          <span>Solve Beam</span>
+        </div>
+        <div class="livemap-legend-row">
+          <span class="livemap-legend-line is-firstblood"></span>
+          <span>First Blood</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="livemap-firstblood-toast" class="livemap-firstblood-toast" aria-live="assertive" aria-atomic="true">
+  <div class="livemap-fb-icon"><i class="fas fa-skull-crossbones" aria-hidden="true"></i></div>
+  <div class="livemap-fb-title">FIRST BLOOD!</div>
+  <p class="livemap-fb-detail">
+    <span id="livemap-firstblood-team" class="livemap-fb-team">Unknown</span>
+    pwned
+    <span id="livemap-firstblood-challenge" class="livemap-fb-challenge">Unknown</span>
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('ctfd_livemap.static', filename='livemap.js') }}"></script>
+{{ super() }}
+{% endblock %}
