@@ -156,20 +156,92 @@ body.livemap-mode .footer {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
+.livemap-canvas-wrap canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.livemap-controls,
 .livemap-stats-overlay,
 .livemap-legend {
   position: absolute;
-  bottom: 1rem;
   z-index: 2;
-  min-width: 13rem;
-  padding: 0.9rem 1rem;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(7, 10, 16, 0.72);
   backdrop-filter: blur(16px);
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.32);
+}
+
+.livemap-controls {
+  top: 1rem;
+  right: 1rem;
+  min-width: 17rem;
+  padding: 0.8rem 0.95rem;
+}
+
+.livemap-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.livemap-control-button {
+  min-width: 2.45rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--livemap-text);
+  cursor: pointer;
+  font: 700 0.9rem/1 "Share Tech Mono", "SFMono-Regular", Consolas, monospace;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.livemap-control-button:hover {
+  border-color: rgba(255, 107, 0, 0.4);
+  background: rgba(255, 107, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.livemap-control-button.is-reset {
+  min-width: 4.6rem;
+}
+
+.livemap-control-readout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.2rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.85rem;
+  background: rgba(4, 8, 12, 0.8);
+  color: var(--livemap-primary);
+  font: 700 0.84rem/1 "Share Tech Mono", "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.livemap-controls-hint {
+  margin: 0.65rem 0 0;
+  color: var(--livemap-muted);
+  font: 600 0.7rem/1.45 "Share Tech Mono", "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.livemap-stats-overlay,
+.livemap-legend {
+  bottom: 1rem;
+  min-width: 13rem;
+  padding: 0.9rem 1rem;
 }
 
 .livemap-stats-overlay {
@@ -331,6 +403,13 @@ body.livemap-mode .footer {
     justify-content: flex-start;
   }
 
+  .livemap-controls {
+    min-width: 15rem;
+    top: 0.75rem;
+    right: 0.75rem;
+    padding: 0.72rem 0.8rem;
+  }
+
   .livemap-stats-overlay,
   .livemap-legend {
     bottom: 0.75rem;
@@ -361,6 +440,12 @@ body.livemap-mode .footer {
     min-height: 72vh;
   }
 
+  .livemap-controls {
+    position: static;
+    min-width: 0;
+    margin: 0.75rem 0.75rem 0;
+  }
+
   .livemap-stats-overlay,
   .livemap-legend {
     position: static;
@@ -375,5 +460,14 @@ body.livemap-mode .footer {
 
   .livemap-canvas-wrap canvas {
     min-height: 58vh;
+  }
+
+  .livemap-controls-row {
+    flex-wrap: wrap;
+  }
+
+  .livemap-control-button,
+  .livemap-control-readout {
+    flex: 1 1 auto;
   }
 }
