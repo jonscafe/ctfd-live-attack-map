@@ -12,6 +12,8 @@
   const BEAM_LIMIT = 120;
   const TEAM_NODE_RADIUS = 14;
   const CHALLENGE_NODE_RADIUS = 11;
+  const MIN_VIEW_SCALE = 0.7;
+  const MAX_VIEW_SCALE = 2.6;
 
   function getUrlRoot() {
     return (window.init && window.init.urlRoot) || "";
@@ -491,11 +493,21 @@
         mode: getModeLabel(),
       },
       lastPollLabel: "Never",
+      zoomLabel: "100%",
       canvas: null,
       ctx: null,
       dpr: 1,
       width: 0,
       height: 0,
+      viewScale: 1,
+      viewOffsetX: 0,
+      viewOffsetY: 0,
+      hasInteracted: false,
+      viewInitialized: false,
+      isDragging: false,
+      dragPointerId: null,
+      dragLastX: 0,
+      dragLastY: 0,
       topTeams: [],
       challenges: [],
       firstBloods: {},
@@ -505,6 +517,11 @@
       _unsubscribe: null,
       _resizeHandler: null,
       _frameHandle: null,
+      _pointerDownHandler: null,
+      _pointerMoveHandler: null,
+      _pointerUpHandler: null,
+      _pointerCancelHandler: null,
+      _wheelHandler: null,
 
       init() {
         document.body.classList.add("livemap-mode");
@@ -513,6 +530,8 @@
         }
         this.canvas = this.$refs.mapCanvas;
         this.ctx = this.canvas ? this.canvas.getContext("2d") : null;
+        this.updateZoomLabel();
+        this.bindCanvasInteractions();
         this._resizeHandler = () => this.resize();
         window.addEventListener("resize", this._resizeHandler);
         this.resize();
@@ -537,6 +556,163 @@
         if (this._frameHandle) {
           window.cancelAnimationFrame(this._frameHandle);
         }
+        this.unbindCanvasInteractions();
+      },
+
+      bindCanvasInteractions() {
+        if (!this.canvas) {
+          return;
+        }
+        this._pointerDownHandler = event => this.onPointerDown(event);
+        this._pointerMoveHandler = event => this.onPointerMove(event);
+        this._pointerUpHandler = event => this.onPointerUp(event);
+        this._pointerCancelHandler = event => this.onPointerUp(event);
+        this._wheelHandler = event => this.onWheel(event);
+
+        this.canvas.addEventListener("pointerdown", this._pointerDownHandler);
+        this.canvas.addEventListener("pointermove", this._pointerMoveHandler);
+        this.canvas.addEventListener("pointerup", this._pointerUpHandler);
+        this.canvas.addEventListener("pointercancel", this._pointerCancelHandler);
+        this.canvas.addEventListener("wheel", this._wheelHandler, { passive: false });
+      },
+
+      unbindCanvasInteractions() {
+        if (!this.canvas) {
+          return;
+        }
+        if (this._pointerDownHandler) {
+          this.canvas.removeEventListener("pointerdown", this._pointerDownHandler);
+        }
+        if (this._pointerMoveHandler) {
+          this.canvas.removeEventListener("pointermove", this._pointerMoveHandler);
+        }
+        if (this._pointerUpHandler) {
+          this.canvas.removeEventListener("pointerup", this._pointerUpHandler);
+        }
+        if (this._pointerCancelHandler) {
+          this.canvas.removeEventListener("pointercancel", this._pointerCancelHandler);
+        }
+        if (this._wheelHandler) {
+          this.canvas.removeEventListener("wheel", this._wheelHandler);
+        }
+      },
+
+      onPointerDown(event) {
+        if (!this.canvas) {
+          return;
+        }
+        if (event.pointerType !== "touch" && event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        this.isDragging = true;
+        this.dragPointerId = event.pointerId;
+        this.dragLastX = event.clientX;
+        this.dragLastY = event.clientY;
+        this.canvas.classList.add("is-dragging");
+        if (typeof this.canvas.setPointerCapture === "function") {
+          try {
+            this.canvas.setPointerCapture(event.pointerId);
+          } catch (error) {
+            // Pointer capture can fail in some embedded browsers. Drag still works without it.
+          }
+        }
+      },
+
+      onPointerMove(event) {
+        if (!this.isDragging || event.pointerId !== this.dragPointerId) {
+          return;
+        }
+        event.preventDefault();
+        this.hasInteracted = true;
+        this.viewOffsetX += event.clientX - this.dragLastX;
+        this.viewOffsetY += event.clientY - this.dragLastY;
+        this.dragLastX = event.clientX;
+        this.dragLastY = event.clientY;
+        this.clampViewport();
+      },
+
+      onPointerUp(event) {
+        if (!this.isDragging || event.pointerId !== this.dragPointerId) {
+          return;
+        }
+        this.isDragging = false;
+        this.dragPointerId = null;
+        if (this.canvas) {
+          this.canvas.classList.remove("is-dragging");
+          if (typeof this.canvas.releasePointerCapture === "function") {
+            try {
+              this.canvas.releasePointerCapture(event.pointerId);
+            } catch (error) {
+              // Safe to ignore when pointer capture was never established.
+            }
+          }
+        }
+      },
+
+      onWheel(event) {
+        if (!this.canvas) {
+          return;
+        }
+        event.preventDefault();
+        const bounds = this.canvas.getBoundingClientRect();
+        const originX = event.clientX - bounds.left;
+        const originY = event.clientY - bounds.top;
+
+        if (event.ctrlKey || event.metaKey) {
+          const zoomFactor = Math.exp(-event.deltaY * 0.0015);
+          this.zoomAt(originX, originY, this.viewScale * zoomFactor);
+          return;
+        }
+
+        this.hasInteracted = true;
+        if (event.shiftKey && Math.abs(event.deltaX) < 0.5) {
+          this.viewOffsetX -= event.deltaY;
+        } else {
+          this.viewOffsetX -= event.deltaX;
+          this.viewOffsetY -= event.deltaY;
+        }
+        this.clampViewport();
+      },
+
+      zoomAt(originX, originY, nextScale) {
+        const clampedScale = clamp(nextScale, MIN_VIEW_SCALE, MAX_VIEW_SCALE);
+        if (Math.abs(clampedScale - this.viewScale) < 0.001) {
+          return;
+        }
+
+        const worldX = (originX - this.viewOffsetX) / this.viewScale;
+        const worldY = (originY - this.viewOffsetY) / this.viewScale;
+
+        this.viewScale = clampedScale;
+        this.viewOffsetX = originX - worldX * this.viewScale;
+        this.viewOffsetY = originY - worldY * this.viewScale;
+        this.hasInteracted = true;
+        this.clampViewport();
+        this.updateZoomLabel();
+      },
+
+      zoomIn() {
+        this.zoomAt(this.width / 2, this.height / 2, this.viewScale * 1.18);
+      },
+
+      zoomOut() {
+        this.zoomAt(this.width / 2, this.height / 2, this.viewScale / 1.18);
+      },
+
+      resetView() {
+        const contentBounds = this.getContentBounds();
+        this.viewScale = 1;
+        this.viewOffsetX = this.width / 2 - ((contentBounds.minX + contentBounds.maxX) / 2) * this.viewScale;
+        this.viewOffsetY = this.height / 2 - ((contentBounds.minY + contentBounds.maxY) / 2) * this.viewScale;
+        this.hasInteracted = false;
+        this.viewInitialized = true;
+        this.clampViewport();
+        this.updateZoomLabel();
+      },
+
+      updateZoomLabel() {
+        this.zoomLabel = `${Math.round(this.viewScale * 100)}%`;
       },
 
       applySnapshot(snapshot) {
@@ -655,6 +831,88 @@
 
         this.teamNodes = nextTeamNodes;
         this.challNodes = nextChallNodes;
+
+        if (!this.viewInitialized || !this.hasInteracted) {
+          this.resetView();
+        } else {
+          this.clampViewport();
+        }
+      },
+
+      getContentBounds() {
+        const bounds = {
+          minX: Infinity,
+          minY: Infinity,
+          maxX: -Infinity,
+          maxY: -Infinity,
+        };
+
+        const includePoint = (x, y) => {
+          bounds.minX = Math.min(bounds.minX, x);
+          bounds.minY = Math.min(bounds.minY, y);
+          bounds.maxX = Math.max(bounds.maxX, x);
+          bounds.maxY = Math.max(bounds.maxY, y);
+        };
+
+        Object.values(this.teamNodes).forEach(node => {
+          const x = typeof node.targetX === "number" ? node.targetX : node.x;
+          const y = typeof node.targetY === "number" ? node.targetY : node.y;
+          includePoint(x - 48, y - 42);
+          includePoint(x + 220, y + 34);
+        });
+
+        Object.values(this.challNodes).forEach(node => {
+          const x = typeof node.targetX === "number" ? node.targetX : node.x;
+          const y = typeof node.targetY === "number" ? node.targetY : node.y;
+          includePoint(x - 280, y - 28);
+          includePoint(x + 28, y + 28);
+        });
+
+        if (!Number.isFinite(bounds.minX)) {
+          return {
+            minX: 0,
+            minY: 0,
+            maxX: this.width,
+            maxY: this.height,
+          };
+        }
+
+        return bounds;
+      },
+
+      getVisibleWorldBounds() {
+        return {
+          minX: (-this.viewOffsetX) / this.viewScale,
+          minY: (-this.viewOffsetY) / this.viewScale,
+          maxX: (this.width - this.viewOffsetX) / this.viewScale,
+          maxY: (this.height - this.viewOffsetY) / this.viewScale,
+        };
+      },
+
+      clampViewport() {
+        if (!this.width || !this.height || !this.viewScale) {
+          return;
+        }
+
+        const bounds = this.getContentBounds();
+        const paddingX = Math.min(140, this.width * 0.16);
+        const paddingY = Math.min(110, this.height * 0.16);
+        const minOffsetX = paddingX - bounds.maxX * this.viewScale;
+        const maxOffsetX = this.width - paddingX - bounds.minX * this.viewScale;
+        const minOffsetY = paddingY - bounds.maxY * this.viewScale;
+        const maxOffsetY = this.height - paddingY - bounds.minY * this.viewScale;
+
+        if (minOffsetX > maxOffsetX) {
+          this.viewOffsetX = (minOffsetX + maxOffsetX) / 2;
+        } else {
+          this.viewOffsetX = clamp(this.viewOffsetX, minOffsetX, maxOffsetX);
+        }
+
+        if (minOffsetY > maxOffsetY) {
+          this.viewOffsetY = (minOffsetY + maxOffsetY) / 2;
+        } else {
+          this.viewOffsetY = clamp(this.viewOffsetY, minOffsetY, maxOffsetY);
+        }
       },
 
       animateNodePositions() {
@@ -683,21 +941,32 @@
         flare.addColorStop(1, "rgba(255, 107, 0, 0)");
         ctx.fillStyle = flare;
         ctx.fillRect(0, 0, this.width, this.height);
+      },
 
+      drawWorldGrid() {
+        const ctx = this.ctx;
+        const visibleBounds = this.getVisibleWorldBounds();
+        const startX = Math.floor((visibleBounds.minX - 96) / 64) * 64;
+        const endX = Math.ceil((visibleBounds.maxX + 96) / 64) * 64;
+        const startY = Math.floor((visibleBounds.minY - 96) / 52) * 52;
+        const endY = Math.ceil((visibleBounds.maxY + 96) / 52) * 52;
+
+        ctx.save();
         ctx.strokeStyle = "rgba(255, 107, 0, 0.08)";
-        ctx.lineWidth = 1;
-        for (let x = 0; x < this.width; x += 64) {
+        ctx.lineWidth = 1 / this.viewScale;
+        for (let x = startX; x <= endX; x += 64) {
           ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, this.height);
+          ctx.moveTo(x, startY);
+          ctx.lineTo(x, endY);
           ctx.stroke();
         }
-        for (let y = 0; y < this.height; y += 52) {
+        for (let y = startY; y <= endY; y += 52) {
           ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(this.width, y);
+          ctx.moveTo(startX, y);
+          ctx.lineTo(endX, y);
           ctx.stroke();
         }
+        ctx.restore();
       },
 
       drawAmbientConnections() {
@@ -858,10 +1127,15 @@
         }
         this.animateNodePositions();
         this.drawBackground();
+        this.ctx.save();
+        this.ctx.translate(this.viewOffsetX, this.viewOffsetY);
+        this.ctx.scale(this.viewScale, this.viewScale);
+        this.drawWorldGrid();
         this.drawAmbientConnections();
         this.drawBeams(now);
         this.drawTeamNodes();
         this.drawChallengeNodes();
+        this.ctx.restore();
       },
 
       loop() {
