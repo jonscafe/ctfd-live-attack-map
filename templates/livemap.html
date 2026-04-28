@@ -22,6 +22,16 @@
     <div class="livemap-canvas-wrap" x-ref="mapWrap">
       <canvas x-ref="mapCanvas" aria-label="Live attack map canvas"></canvas>
 
+      <div class="livemap-controls" aria-label="Map controls">
+        <div class="livemap-controls-row">
+          <button type="button" class="livemap-control-button" @click="zoomOut" aria-label="Zoom out">-</button>
+          <span class="livemap-control-readout" x-text="zoomLabel"></span>
+          <button type="button" class="livemap-control-button" @click="zoomIn" aria-label="Zoom in">+</button>
+          <button type="button" class="livemap-control-button is-reset" @click="resetView" aria-label="Reset view">Reset</button>
+        </div>
+        <p class="livemap-controls-hint">Drag to pan. Scroll to move. Ctrl/Cmd + scroll to zoom.</p>
+      </div>
+
       <div class="livemap-stats-overlay">
         <div class="livemap-overlay-title">Signal</div>
         <div class="livemap-overlay-row">
