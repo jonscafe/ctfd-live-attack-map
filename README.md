@@ -34,6 +34,7 @@ You only need a theme build if you separately edit a theme’s own `assets/` sou
 - Shows a centered first-blood toast on every page, not just `/livemap`
 - Adds a `Live Map` entry to the user plugin menu
 - Falls back to `Challenge #<id>` labels if the challenge listing API is not available to the current viewer
+- Supports drag-to-pan, wheel scrolling, and zoom controls on the live map canvas
 
 ## Files
 
@@ -91,6 +92,14 @@ The page component is responsible for:
 - laying out team/user and challenge nodes
 - animating node movement when rankings change
 - drawing solve beams and first-blood effects
+- handling drag, scroll, and zoom interactions on the canvas
+
+## Map Controls
+
+- Drag on the canvas to pan the map
+- Scroll to move the viewport
+- Hold `Ctrl` or `Cmd` while scrolling to zoom toward the cursor
+- Use the on-screen `-`, `+`, and `Reset` controls in the top-right corner of the map
 
 ## Polling Behavior
 
@@ -159,4 +168,5 @@ After installation, verify:
    - `/plugins/live-attack-map/static/sounds/firstblood.mp3`
 4. the signal badges populate with mode, node count, active beams, and last poll time
 5. new solves animate on the map within a few seconds
-6. a new first blood shows the gold toast and tries to play audio when the viewer has challenge API access
+6. dragging, scrolling, and zoom controls move the map as expected
+7. a new first blood shows the gold toast and tries to play audio when the viewer has challenge API access
