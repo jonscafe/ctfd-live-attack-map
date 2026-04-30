@@ -2,7 +2,7 @@
 
 This plugin adds a live attack map page at `/livemap` and a site-wide first-blood toast for CTFd.
 
-Adjust the poll time as you needed, just make sure that it didnt self-DoS your CTFd.
+Live updates are event-driven through SSE, so there is no polling interval to tune.
 
 ## Do You Need `npm build`?
 
@@ -76,16 +76,16 @@ The plugin registers:
 
 The frontend script does two jobs:
 
-1. It runs a shared polling store on every page.
+1. It runs a shared live-update store on every page.
 2. It initializes the `LiveMap` Alpine component when the `/livemap` page is present.
 
 On `/livemap`, the template also injects `livemap.js` before the theme's normal page script so the `LiveMap` Alpine component is registered before the theme calls `Alpine.start()`.
 
 The shared store is responsible for:
 
-- polling scoreboard and challenge data
-- detecting new solves
-- verifying first blood through the challenge solves endpoint
+- loading scoreboard and challenge data on first paint
+- refreshing solve data on SSE update events
+- verifying first bloods through the challenge solves endpoint when available
 - showing the site-wide first-blood toast and audio
 
 The page component is responsible for:
@@ -103,19 +103,22 @@ The page component is responsible for:
 - Hold `Ctrl` or `Cmd` while scrolling to zoom toward the cursor
 - Use the on-screen `-`, `+`, and `Reset` controls in the top-right corner of the map
 
-## Polling Behavior
+## Live Update Behavior
 
-- `/livemap` polls every 2 seconds for faster map updates
-- other pages poll every 4 seconds for first-blood toast detection
-- solve detection uses `GET /api/v1/scoreboard/top/50`
-- full challenge metadata is requested when available, but the map can still render from solve-feed data if that endpoint is restricted
+- The client performs one initial load for scoreboard, challenges, and solve feed data
+- Live updates arrive via `/api/v1/events` Server-Sent Events
+- Solve refreshes use `GET /api/v1/scoreboard/top/50` when update events arrive
+- Full challenge metadata is requested when available, but the map can still render from solve-feed data if that endpoint is restricted
 
 ## API Endpoints Used
 
 - `GET /api/v1/scoreboard`
 - `GET /api/v1/challenges`
+- `GET /api/v1/challenges/<challenge_id>`
 - `GET /api/v1/scoreboard/top/50`
 - `GET /api/v1/challenges/<challenge_id>/solves`
+- `GET /api/v1/teams/<account_id>` / `GET /api/v1/users/<account_id>`
+- `GET /api/v1/events`
 
 The plugin can still draw nodes and beams if `GET /api/v1/challenges` is unavailable, but challenge names and confirmed first-blood behavior depend on challenge API access.
 
@@ -125,9 +128,9 @@ First blood is not guessed only from the current top-10 snapshot.
 
 When a new solve appears:
 
-- the plugin detects it from the top scoreboard feed
-- if that challenge does not already have a recorded first blood in the client store, the plugin confirms the earliest solve with `GET /api/v1/challenges/<challenge_id>/solves`
-- if the new solve matches the earliest confirmed solve, it is treated as first blood
+- the client refreshes solve data when an update event arrives
+- the backend publishes a `livemap_fb` event to the SSE stream for first blood
+- the client confirms first bloods with `GET /api/v1/challenges/<challenge_id>/solves` when needed
 
 This helps avoid false positives when the first solver was not visible in the current top list.
 
@@ -136,7 +139,7 @@ If the current viewer cannot access the challenge endpoints, the map still updat
 ## Notes And Caveats
 
 - The map page shows only the top 10 teams or users as nodes.
-- Solve detection polls the top 50 scoreboard detail feed.
+- Solve detection refreshes the top 50 scoreboard detail feed on SSE update events.
 - If a first blood happened before a browser opened the site, it will still be marked on the map, but the toast only appears for newly detected events in that browser session.
 - Browser autoplay rules can block sound until the user has interacted with the page. The toast will still appear.
 - The plugin assumes the active theme exposes `window.Alpine` and `window.CTFd`, which matches standard CTFd themes.
@@ -168,7 +171,7 @@ After installation, verify:
    - `/plugins/live-attack-map/static/livemap.js`
    - `/plugins/live-attack-map/static/livemap.css`
    - `/plugins/live-attack-map/static/sounds/firstblood.mp3`
-4. the signal badges populate with mode, node count, active beams, and last poll time
+4. the signal badges populate with mode, node count, active beams, and last update time
 5. new solves animate on the map within a few seconds
 6. dragging, scrolling, and zoom controls move the map as expected
 7. a new first blood shows the gold toast and tries to play audio when the viewer has challenge API access

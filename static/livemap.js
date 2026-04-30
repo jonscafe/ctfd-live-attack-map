@@ -4,8 +4,6 @@
   }
   window.__ctfdLiveMapLoaded = true;
 
-  const LIVEMAP_POLL_INTERVAL = 30000;
-  const GLOBAL_POLL_INTERVAL = 30000;
   const TOP_NODE_COUNT = 10;
   const SOLVE_FEED_COUNT = 50;
   const TOAST_DURATION = 4500;
@@ -34,15 +32,6 @@
 
   function getAccountType() {
     return getMode() === "teams" ? "team" : "user";
-  }
-
-  function isLiveMapPage() {
-    const pathname = window.location && window.location.pathname;
-    return pathname === withRoot("/livemap");
-  }
-
-  function getPollInterval() {
-    return isLiveMapPage() ? LIVEMAP_POLL_INTERVAL : GLOBAL_POLL_INTERVAL;
   }
 
   function hashString(input) {
@@ -182,7 +171,8 @@
   const liveMapStore = {
     subscribers: new Set(),
     fetching: false,
-    pollHandle: null,
+    started: false,
+    sseSource: null,
     confirmCache: new Map(),
     state: {
       mapStatus: "Loading",
@@ -231,11 +221,146 @@
     },
 
     start() {
-      if (this.pollHandle) {
+      if (this.started) {
         return;
       }
-      this.poll();
-      this.pollHandle = window.setInterval(() => this.poll(), getPollInterval());
+      this.started = true;
+      this.refreshState({ initial: true });
+      this.setupSSE();
+    },
+
+    setupSSE() {
+      if (this.sseSource || typeof window.EventSource !== "function") {
+        return;
+      }
+
+      let source;
+      try {
+        source = new EventSource(withRoot("/api/v1/events"));
+      } catch (error) {
+        console.error("Failed to establish SSE connection.", error);
+        return;
+      }
+      source.addEventListener("livemap_fb", event => {
+        void this.handleFirstBloodEvent(event);
+      });
+      source.addEventListener("page", () => {
+        void this.refreshState();
+      });
+      source.addEventListener("update", () => {
+        void this.refreshState();
+      });
+      source.onerror = () => {
+        console.error("SSE connection lost. Reconnecting...");
+      };
+      this.sseSource = source;
+    },
+
+    async handleFirstBloodEvent(event) {
+      if (!event || !event.data) {
+        return;
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        return;
+      }
+
+      const challengeId = Number(payload.challenge_id);
+      const accountId = Number(payload.account_id);
+      if (!Number.isFinite(challengeId) || challengeId <= 0 || !Number.isFinite(accountId) || accountId <= 0) {
+        return;
+      }
+
+      const existing = this.state.firstBloods[challengeId];
+      if (existing) {
+        return;
+      }
+
+      const account = this.state.topTeams.find(accountEntry => Number(accountEntry.accountId) === accountId);
+      const challenge = this.state.challenges.find(item => Number(item.id) === challengeId);
+
+      let accountName = account ? account.name : "";
+      let challengeName = challenge ? challenge.name : "";
+
+      if (!accountName) {
+        const fetchedAccount = await this.fetchAccount(accountId);
+        accountName = fetchedAccount ? fetchedAccount.name : "";
+      }
+
+      if (!challengeName) {
+        const fetchedChallenge = await this.fetchChallenge(challengeId);
+        challengeName = fetchedChallenge ? fetchedChallenge.name : "";
+      }
+
+      this.state.firstBloods[challengeId] = {
+        accountId,
+        name: accountName || "",
+        date: new Date().toISOString(),
+      };
+      this.state.mapStatus = "Live";
+      this.state.mapStatusTone = "live";
+      this.state.lastPollAt = Date.now();
+
+      if (accountName || challengeName) {
+        toastManager.show(accountName || "Unknown", challengeName || "Unknown");
+      }
+
+      if (account && challenge) {
+        this.notify([
+          {
+            accountKey: account.key,
+            accountId,
+            accountType: account.accountType,
+            teamName: account.name,
+            challengeId,
+            date: new Date().toISOString(),
+            value: 0,
+            isFirstBlood: true,
+          },
+        ]);
+        return;
+      }
+
+      this.notify([]);
+    },
+
+    async fetchAccount(accountId) {
+      const accountType = getAccountType();
+      const endpoint = accountType === "team" ? `/api/v1/teams/${accountId}` : `/api/v1/users/${accountId}`;
+      try {
+        const response = await fetchJson(endpoint);
+        const data = response && response.data;
+        if (!data) {
+          return null;
+        }
+        return {
+          key: `${accountType}:${accountId}`,
+          accountId: data.id != null ? data.id : accountId,
+          accountType,
+          name: data.name || "Unknown",
+        };
+      } catch (error) {
+        return null;
+      }
+    },
+
+    async fetchChallenge(challengeId) {
+      try {
+        const response = await fetchJson(`/api/v1/challenges/${challengeId}`);
+        const data = response && response.data;
+        if (!data) {
+          return null;
+        }
+        return {
+          id: Number(data.id),
+          name: data.name || "Unknown",
+        };
+      } catch (error) {
+        return null;
+      }
     },
 
     async confirmFirstSolve(challengeId) {
@@ -331,7 +456,42 @@
       ].join(":");
     },
 
-    async poll() {
+    async hydrateFirstBloods(challenges, canConfirm) {
+      if (!canConfirm) {
+        return;
+      }
+
+      const candidates = challenges.filter(challenge => {
+        return challenge.solves > 0 && !(challenge.id in this.state.firstBloods);
+      });
+
+      if (!candidates.length) {
+        return;
+      }
+
+      const results = await Promise.allSettled(
+        candidates.map(challenge => {
+          return this.confirmFirstSolve(challenge.id).then(solve => ({
+            challengeId: challenge.id,
+            solve,
+          }));
+        })
+      );
+
+      results.forEach(result => {
+        if (result.status !== "fulfilled" || !result.value || !result.value.solve) {
+          return;
+        }
+        const solve = result.value.solve;
+        this.state.firstBloods[result.value.challengeId] = {
+          accountId: solve.account_id,
+          name: solve.name || "",
+          date: solve.date,
+        };
+      });
+    },
+
+    async refreshState(options = {}) {
       if (this.fetching) {
         return;
       }
@@ -349,7 +509,7 @@
         const solveFeedResponse = solveFeedResult.status === "fulfilled" ? solveFeedResult.value : null;
 
         if (!standingsResponse && !solveFeedResponse && !challengesResponse) {
-          throw new Error("Live map polling failed for all data sources");
+          throw new Error("Live map update failed for all data sources");
         }
 
         const topTeams = standingsResponse
@@ -408,11 +568,12 @@
         };
         this.state.lastPollAt = Date.now();
 
-        if (!this.initialized) {
+        if (!this.initialized || options.initial) {
           this.initialized = true;
           this.challengeSolveCounts = challengeSolveCounts;
           this.state.mapStatus = topTeams.length ? "Live" : "Waiting for scores";
           this.state.mapStatusTone = topTeams.length ? "live" : "idle";
+          await this.hydrateFirstBloods(challenges, Boolean(challengesResponse));
           this.notify([]);
           return;
         }
