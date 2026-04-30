@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template
 from sqlalchemy import event
 
-from CTFd.models import Solves, db
+from CTFd.models import Challenges, Solves, db
 from CTFd.utils.events import ServerSentEvents
 
 from CTFd.plugins import (
@@ -12,6 +12,9 @@ from CTFd.plugins import (
 
 
 def check_first_blood(mapper, connection, target):
+    connection.execute(
+        db.select(Challenges.id).where(Challenges.id == target.challenge_id).with_for_update()
+    )
     solve_count = connection.scalar(
         db.select(db.func.count(Solves.id)).where(Solves.challenge_id == target.challenge_id)
     )

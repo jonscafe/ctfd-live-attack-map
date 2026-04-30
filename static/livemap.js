@@ -263,8 +263,8 @@
       }
 
       const challengeId = Number(payload.challenge_id);
-      const accountId = payload.account_id;
-      if (!Number.isFinite(challengeId) || accountId == null) {
+      const accountId = Number(payload.account_id);
+      if (!Number.isFinite(challengeId) || !Number.isFinite(accountId) || accountId <= 0) {
         return;
       }
 
@@ -291,7 +291,7 @@
 
       this.state.firstBloods[challengeId] = {
         accountId,
-        name: accountName || (account ? account.name : ""),
+        name: accountName || "",
         date: new Date().toISOString(),
       };
       this.state.mapStatus = "Live";
