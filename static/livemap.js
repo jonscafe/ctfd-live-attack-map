@@ -264,7 +264,7 @@
 
       const challengeId = Number(payload.challenge_id);
       const accountId = Number(payload.account_id);
-      if (!Number.isFinite(challengeId) || !Number.isFinite(accountId) || accountId <= 0) {
+      if (!Number.isFinite(challengeId) || challengeId <= 0 || !Number.isFinite(accountId) || accountId <= 0) {
         return;
       }
 
@@ -273,7 +273,7 @@
         return;
       }
 
-      const account = this.state.topTeams.find(team => String(team.accountId) === String(accountId));
+      const account = this.state.topTeams.find(accountEntry => String(accountEntry.accountId) === String(accountId));
       const challenge = this.state.challenges.find(item => Number(item.id) === challengeId);
 
       let accountName = account ? account.name : "";

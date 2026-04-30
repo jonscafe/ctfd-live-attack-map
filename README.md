@@ -105,10 +105,10 @@ The page component is responsible for:
 
 ## Live Update Behavior
 
-- the client performs one initial load for scoreboard, challenges, and solve feed data
-- live updates arrive via `/api/v1/events` Server-Sent Events
-- solve refreshes use `GET /api/v1/scoreboard/top/50` when update events arrive
-- full challenge metadata is requested when available, but the map can still render from solve-feed data if that endpoint is restricted
+- The client performs one initial load for scoreboard, challenges, and solve feed data
+- Live updates arrive via `/api/v1/events` Server-Sent Events
+- Solve refreshes use `GET /api/v1/scoreboard/top/50` when update events arrive
+- Full challenge metadata is requested when available, but the map can still render from solve-feed data if that endpoint is restricted
 
 ## API Endpoints Used
 
