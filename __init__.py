@@ -1,8 +1,11 @@
 from flask import Blueprint, render_template
 from sqlalchemy import event
+from sqlalchemy.orm import object_session
 
-from CTFd.models import Challenges, Solves, db
+from CTFd.models import Solves, db
 from CTFd.utils.events import ServerSentEvents
+
+PENDING_FIRST_BLOODS_KEY = "livemap_pending_first_bloods"
 
 from CTFd.plugins import (
     register_plugin_script,
@@ -12,19 +15,38 @@ from CTFd.plugins import (
 
 
 def check_first_blood(mapper, connection, target):
-    connection.execute(
-        db.select(Challenges.id).where(Challenges.id == target.challenge_id).with_for_update()
-    )
-    solve_count = connection.scalar(
-        db.select(db.func.count(Solves.id)).where(Solves.challenge_id == target.challenge_id)
-    )
+    session = object_session(target)
+    if session is None or target.challenge_id is None or target.account_id is None:
+        return
 
-    if solve_count == 1:
-        payload = {
-            "challenge_id": target.challenge_id,
-            "account_id": target.account_id,
-        }
-        ServerSentEvents.publish(data=payload, type="livemap_fb")
+    pending = session.info.setdefault(PENDING_FIRST_BLOODS_KEY, {})
+    account_ids = pending.setdefault(target.challenge_id, set())
+    account_ids.add(int(target.account_id))
+
+
+def publish_first_bloods(session):
+    pending = session.info.pop(PENDING_FIRST_BLOODS_KEY, {})
+    if not pending:
+        return
+
+    with db.engine.connect() as connection:
+        for challenge_id, account_ids in pending.items():
+            first_solve = connection.execute(
+                db.select(Solves.account_id)
+                .where(Solves.challenge_id == challenge_id)
+                .order_by(Solves.date, Solves.id)
+                .limit(1)
+            ).first()
+            if not first_solve:
+                continue
+
+            first_account_id = first_solve[0]
+            if first_account_id in account_ids:
+                payload = {
+                    "challenge_id": challenge_id,
+                    "account_id": first_account_id,
+                }
+                ServerSentEvents.publish(data=payload, type="livemap_fb")
 
 
 def load(app):
@@ -50,3 +72,4 @@ def load(app):
     register_user_page_menu_bar("Live Map", "livemap")
 
     event.listen(Solves, "after_insert", check_first_blood)
+    event.listen(db.session, "after_commit", publish_first_bloods)
