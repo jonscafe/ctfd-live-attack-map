@@ -29,24 +29,23 @@ def publish_first_bloods(session):
     if not pending:
         return
 
-    with db.engine.connect() as connection:
-        for challenge_id, account_ids in pending.items():
-            first_solve = connection.execute(
-                db.select(Solves.account_id)
-                .where(Solves.challenge_id == challenge_id)
-                .order_by(Solves.date, Solves.id)
-                .limit(1)
-            ).first()
-            if not first_solve:
-                continue
+    for challenge_id, account_ids in pending.items():
+        first_solve = session.execute(
+            db.select(Solves.account_id)
+            .where(Solves.challenge_id == challenge_id)
+            .order_by(Solves.date, Solves.id)
+            .limit(1)
+        ).first()
+        if not first_solve:
+            continue
 
-            first_account_id = first_solve[0]
-            if first_account_id in account_ids:
-                payload = {
-                    "challenge_id": challenge_id,
-                    "account_id": first_account_id,
-                }
-                ServerSentEvents.publish(data=payload, type="livemap_fb")
+        first_account_id = first_solve[0]
+        if first_account_id in account_ids:
+            payload = {
+                "challenge_id": challenge_id,
+                "account_id": first_account_id,
+            }
+            ServerSentEvents.publish(data=payload, type="livemap_fb")
 
 
 def load(app):

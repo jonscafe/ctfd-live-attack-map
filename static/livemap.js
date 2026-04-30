@@ -234,7 +234,13 @@
         return;
       }
 
-      const source = new EventSource(withRoot("/api/v1/events"));
+      let source;
+      try {
+        source = new EventSource(withRoot("/api/v1/events"));
+      } catch (error) {
+        console.error("Failed to establish SSE connection.", error);
+        return;
+      }
       source.addEventListener("livemap_fb", event => {
         void this.handleFirstBloodEvent(event);
       });
@@ -273,7 +279,7 @@
         return;
       }
 
-      const account = this.state.topTeams.find(accountEntry => String(accountEntry.accountId) === String(accountId));
+      const account = this.state.topTeams.find(accountEntry => Number(accountEntry.accountId) === accountId);
       const challenge = this.state.challenges.find(item => Number(item.id) === challengeId);
 
       let accountName = account ? account.name : "";
@@ -450,8 +456,8 @@
       ].join(":");
     },
 
-    async hydrateFirstBloods(challenges, challengesResponse) {
-      if (!challengesResponse) {
+    async hydrateFirstBloods(challenges, canConfirm) {
+      if (!canConfirm) {
         return;
       }
 
@@ -567,7 +573,7 @@
           this.challengeSolveCounts = challengeSolveCounts;
           this.state.mapStatus = topTeams.length ? "Live" : "Waiting for scores";
           this.state.mapStatusTone = topTeams.length ? "live" : "idle";
-          await this.hydrateFirstBloods(challenges, challengesResponse);
+          await this.hydrateFirstBloods(challenges, Boolean(challengesResponse));
           this.notify([]);
           return;
         }
